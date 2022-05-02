@@ -1,0 +1,45 @@
+diff --git a/Makefile b/Makefile
+index 1fa4378..12023d7 100644
+--- a/Makefile
++++ b/Makefile
+@@ -52,7 +52,7 @@ endif
+ 
+ $(DEBUG_APK): toolchain
+ 	mkdir -p android/libs
+-	go run gioui.org/cmd/gogio -buildmode archive -target android -appid $(APPID) -tags novulkan -o $(AAR) github.com/tailscale/tailscale-android/cmd/tailscale
++	go run gioui.org/cmd/gogio -ldflags "-X main.ControlServer=$(TAILSCALE_CONTROL_SERVER)" -buildmode archive -target android -appid $(APPID) -tags novulkan -o $(AAR) github.com/tailscale/tailscale-android/cmd/tailscale
+ 	(cd android && ./gradlew assemblePlayDebug)
+ 	mv android/build/outputs/apk/play/debug/android-play-debug.apk $@
+ 
+diff --git a/cmd/tailscale/backend.go b/cmd/tailscale/backend.go
+index df7955a..5b0755a 100644
+--- a/cmd/tailscale/backend.go
++++ b/cmd/tailscale/backend.go
+@@ -147,8 +147,13 @@ func newBackend(dataDir string, jvm *jni.JVM, appCtx jni.Object, store *stateSto
+ 
+ func (b *backend) Start(notify func(n ipn.Notify)) error {
+ 	b.backend.SetNotifyCallback(notify)
++
++	prefs := ipn.NewPrefs()
++	prefs.ControlURL = ControlServer
++
+ 	return b.backend.Start(ipn.Options{
+-		StateKey: "ipn-android",
++		UpdatePrefs: prefs,
++		StateKey:    "ipn-android",
+ 	})
+ }
+ 
+diff --git a/cmd/tailscale/main.go b/cmd/tailscale/main.go
+index e0aad51..c1b7266 100644
+--- a/cmd/tailscale/main.go
++++ b/cmd/tailscale/main.go
+@@ -45,6 +45,8 @@ import (
+ 	"tailscale.com/wgengine/router"
+ )
+ 
++var ControlServer string
++
+ type App struct {
+ 	jvm *jni.JVM
+ 	// appCtx is a global reference to the com.tailscale.ipn.App instance.
